@@ -2,61 +2,104 @@
 // Compatible with OpenZeppelin Contracts ^5.0.0
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Pausable.sol";
-import "@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 
-contract ImpactNFT is ERC1155, AccessControl, ERC1155Pausable, ERC1155Supply {
-    bytes32 public constant URI_SETTER_ROLE = keccak256("URI_SETTER_ROLE");
-    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
+contract ImapactNFT is ERC721, ERC721Enumerable, AccessControl {
+    error TransferError();
+    error SupplyExceeded();
 
-    constructor(address defaultAdmin, address pauser, address issuer)
-        ERC1155("https://example.co")
-    {
+    address public _receiver;
+    uint256 public _maxSupply;
+    uint256 public _unitPrice;
+    uint256 public _nextTokenId;
+    bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
+    ERC20 public constant USDC = ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+
+    string public DEFAULT_METADATA;
+    mapping(uint => string) metadata;
+
+    constructor(
+        uint maxSupply,
+        uint unitPrice,
+        address receiver,
+        address defaultAdmin,
+        string memory tokenTitle,
+        string memory defaultMetadataURI
+    ) ERC721(tokenTitle, tokenTitle) {
+        _receiver = receiver;
+        _maxSupply = maxSupply;
+        _unitPrice = unitPrice;
+
+        DEFAULT_METADATA = defaultMetadataURI;
+
         _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
-        _grantRole(PAUSER_ROLE, pauser);
-        _grantRole(ISSUER_ROLE, issuer);
+        _grantRole(SETTER_ROLE, defaultAdmin);
     }
 
-    function setURI(string memory newuri) public onlyRole(URI_SETTER_ROLE) {
-        _setURI(newuri);
+    function mintBatch(uint quantity) public {
+        uint totalPrice = _unitPrice * quantity;
+        if (totalSupply() + quantity > _maxSupply) revert SupplyExceeded();
+
+        if (!USDC.transferFrom(msg.sender, _receiver, totalPrice))
+            revert TransferError();
+
+        for (uint i = 0; i < quantity; i++) {
+            uint256 tokenId = _nextTokenId++;
+            _safeMint(msg.sender, tokenId);
+        }
     }
 
-    function pause() public onlyRole(PAUSER_ROLE) {
-        _pause();
+    function setMetadata(
+        uint tokenId,
+        string memory newURI
+    ) public onlyRole(SETTER_ROLE) {
+        _setMetadata(tokenId, newURI);
     }
 
-    function unpause() public onlyRole(PAUSER_ROLE) {
-        _unpause();
+    function setBatchURI(
+        uint[] memory tokenIds,
+        string[] memory newURIs
+    ) public onlyRole(SETTER_ROLE) {
+        for (uint i = 0; i < tokenIds.length; i++) {
+            _setMetadata(tokenIds[i], newURIs[i]);
+        }
     }
 
-    function mint(address account, uint256 id, uint256 amount, bytes memory data)
-        public
-    {
-        _mint(account, id, amount, data);
+    function _setMetadata(uint tokenId, string memory newURI) internal {
+        metadata[tokenId] = newURI;
     }
 
-    function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data)
-        public
-    {
-        _mintBatch(to, ids, amounts, data);
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        string memory _tokenURI = metadata[tokenId];
+        return bytes(_tokenURI).length != 0 ? _tokenURI : DEFAULT_METADATA;
     }
 
     // The following functions are overrides required by Solidity.
 
-    function _update(address from, address to, uint256[] memory ids, uint256[] memory values)
-        internal
-        override(ERC1155, ERC1155Pausable, ERC1155Supply)
-    {
-        super._update(from, to, ids, values);
+    function _update(
+        address to,
+        uint256 tokenId,
+        address auth
+    ) internal override(ERC721, ERC721Enumerable) returns (address) {
+        return super._update(to, tokenId, auth);
     }
 
-    function supportsInterface(bytes4 interfaceId)
+    function _increaseBalance(
+        address account,
+        uint128 value
+    ) internal override(ERC721, ERC721Enumerable) {
+        super._increaseBalance(account, value);
+    }
+
+    function supportsInterface(
+        bytes4 interfaceId
+    )
         public
         view
-        override(ERC1155, AccessControl)
+        override(ERC721, ERC721Enumerable, AccessControl)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
