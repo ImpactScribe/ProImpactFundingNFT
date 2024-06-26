@@ -66,7 +66,7 @@ contract ImpactNFTImplementation is ERC721, ERC721Enumerable, AccessControl {
         _setMetadata(tokenId, newURI);
     }
 
-    function setBatchURI(
+    function setMetadataBatch(
         uint[] memory tokenIds,
         string[] memory newURIs
     ) public onlyRole(SETTER_ROLE) {
