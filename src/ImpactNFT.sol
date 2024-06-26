@@ -1,107 +1,29 @@
 // SPDX-License-Identifier: MIT
-// Compatible with OpenZeppelin Contracts ^5.0.0
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+contract ImpactNFT {
+    error InvalidImplementation();
 
-contract ImapactNFT is ERC721, ERC721Enumerable, AccessControl {
-    error TransferError();
-    error SupplyExceeded();
+    address public constant ImpactNFTImplementation =
+        0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;  // ToDo: set actual implementation contract address
 
-    address public _receiver;
-    uint256 public _maxSupply;
-    uint256 public _unitPrice;
-    uint256 public _nextTokenId;
-    bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
-    ERC20 public constant USDC = ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+    fallback() external {
+        address impl = ImpactNFTImplementation;
+        if (impl == address(0)) revert InvalidImplementation();
 
-    string public DEFAULT_METADATA;
-    mapping(uint => string) metadata;
-
-    constructor(
-        uint maxSupply,
-        uint unitPrice,
-        address receiver,
-        address defaultAdmin,
-        string memory tokenTitle,
-        string memory defaultMetadataURI
-    ) ERC721(tokenTitle, tokenTitle) {
-        _receiver = receiver;
-        _maxSupply = maxSupply;
-        _unitPrice = unitPrice;
-
-        DEFAULT_METADATA = defaultMetadataURI;
-
-        _grantRole(DEFAULT_ADMIN_ROLE, defaultAdmin);
-        _grantRole(SETTER_ROLE, defaultAdmin);
-    }
-
-    function mintBatch(uint quantity) public {
-        uint totalPrice = _unitPrice * quantity;
-        if (totalSupply() + quantity > _maxSupply) revert SupplyExceeded();
-
-        if (!USDC.transferFrom(msg.sender, _receiver, totalPrice))
-            revert TransferError();
-
-        for (uint i = 0; i < quantity; i++) {
-            uint256 tokenId = _nextTokenId++;
-            _safeMint(msg.sender, tokenId);
+        assembly {
+            let ptr := mload(0x40)
+            calldatacopy(ptr, 0, calldatasize())
+            let result := delegatecall(gas(), impl, ptr, calldatasize(), 0, 0)
+            let size := returndatasize()
+            returndatacopy(ptr, 0, size)
+            switch result
+            case 0 {
+                revert(ptr, size)
+            }
+            default {
+                return(ptr, size)
+            }
         }
-    }
-
-    function setMetadata(
-        uint tokenId,
-        string memory newURI
-    ) public onlyRole(SETTER_ROLE) {
-        _setMetadata(tokenId, newURI);
-    }
-
-    function setBatchURI(
-        uint[] memory tokenIds,
-        string[] memory newURIs
-    ) public onlyRole(SETTER_ROLE) {
-        for (uint i = 0; i < tokenIds.length; i++) {
-            _setMetadata(tokenIds[i], newURIs[i]);
-        }
-    }
-
-    function _setMetadata(uint tokenId, string memory newURI) internal {
-        metadata[tokenId] = newURI;
-    }
-
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        string memory _tokenURI = metadata[tokenId];
-        return bytes(_tokenURI).length != 0 ? _tokenURI : DEFAULT_METADATA;
-    }
-
-    // The following functions are overrides required by Solidity.
-
-    function _update(
-        address to,
-        uint256 tokenId,
-        address auth
-    ) internal override(ERC721, ERC721Enumerable) returns (address) {
-        return super._update(to, tokenId, auth);
-    }
-
-    function _increaseBalance(
-        address account,
-        uint128 value
-    ) internal override(ERC721, ERC721Enumerable) {
-        super._increaseBalance(account, value);
-    }
-
-    function supportsInterface(
-        bytes4 interfaceId
-    )
-        public
-        view
-        override(ERC721, ERC721Enumerable, AccessControl)
-        returns (bool)
-    {
-        return super.supportsInterface(interfaceId);
     }
 }
