@@ -2,12 +2,12 @@
 // Compatible with OpenZeppelin Contracts ^5.0.0
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract ImpactNFTImplementation is ERC721, ERC721Enumerable, AccessControl {
+    error PaymentError();
     error TransferError();
     error SupplyExceeded();
     error AlreadyInitalized();
@@ -18,8 +18,6 @@ contract ImpactNFTImplementation is ERC721, ERC721Enumerable, AccessControl {
     uint256 public _initBlock;
     uint256 public _nextTokenId;
     bytes32 public constant SETTER_ROLE = keccak256("SETTER_ROLE");
-    ERC20 public constant USDC =
-        ERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
 
     string public DEFAULT_METADATA;
     mapping(uint => string) public metadata;
@@ -46,12 +44,11 @@ contract ImpactNFTImplementation is ERC721, ERC721Enumerable, AccessControl {
         _grantRole(SETTER_ROLE, defaultAdmin);
     }
 
-    function mintBatch(uint quantity) public {
+    function mintBatch(uint quantity) public payable {
         uint totalPrice = _unitPrice * quantity;
+        if (msg.value < totalPrice) revert PaymentError();
+        if (!payable(_receiver).send(msg.value)) revert TransferError();
         if (totalSupply() + quantity > _maxSupply) revert SupplyExceeded();
-
-        if (!USDC.transferFrom(msg.sender, _receiver, totalPrice))
-            revert TransferError();
 
         for (uint i = 0; i < quantity; i++) {
             uint256 tokenId = _nextTokenId++;
