@@ -5,9 +5,9 @@ contract ImpactNFT {
     error InvalidImplementation();
 
     address public constant ImpactNFTImplementation =
-        0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;  // ToDo: set actual implementation contract address
+        0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // ToDo: set actual implementation contract address
 
-    fallback() external {
+    fallback() external payable {
         address impl = ImpactNFTImplementation;
         if (impl == address(0)) revert InvalidImplementation();
 
@@ -25,5 +25,9 @@ contract ImpactNFT {
                 return(ptr, size)
             }
         }
+    }
+
+    receive() external payable {
+        revert();
     }
 }
